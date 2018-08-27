@@ -1947,6 +1947,8 @@ static void janus_nosip_connect_sockets(janus_nosip_session *session, struct soc
 		if(connect(session->media.audio_rtp_fd, (struct sockaddr *)server_addr, sizeof(struct sockaddr)) == -1) {
 			JANUS_LOG(LOG_ERR, "[NoSIP-%p] Couldn't connect audio RTP? (%s:%d)\n", session, session->media.remote_ip, session->media.remote_audio_rtp_port);
 			JANUS_LOG(LOG_ERR, "[NoSIP-%p]   -- %d (%s)\n", session, errno, strerror(errno));
+		} else {
+			JANUS_LOG(LOG_INFO, "[NoSIP-%p] thread=%lx Connected audio RTP local:%d->%s:%d\n", session, pthread_self(), session->media.local_audio_rtp_port, session->media.remote_ip, session->media.remote_audio_rtp_port);
 		}
 	}
 	if(session->media.remote_audio_rtcp_port) {
@@ -1961,6 +1963,8 @@ static void janus_nosip_connect_sockets(janus_nosip_session *session, struct soc
 		if(connect(session->media.video_rtp_fd, (struct sockaddr *)server_addr, sizeof(struct sockaddr)) == -1) {
 			JANUS_LOG(LOG_ERR, "[NoSIP-%p] Couldn't connect video RTP? (%s:%d)\n", session, session->media.remote_ip, session->media.remote_video_rtp_port);
 			JANUS_LOG(LOG_ERR, "[NoSIP-%p]   -- %d (%s)\n", session, errno, strerror(errno));
+		} else {
+			JANUS_LOG(LOG_INFO, "[NoSIP-%p] thread=%lx Connected video RTP local:%d->%s:%d\n", session, pthread_self(), session->media.local_video_rtp_port, session->media.remote_ip, session->media.remote_video_rtp_port);
 		}
 	}
 	if(session->media.remote_video_rtcp_port) {
