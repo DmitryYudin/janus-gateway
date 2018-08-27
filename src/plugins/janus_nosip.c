@@ -1003,13 +1003,24 @@ void janus_nosip_incoming_rtp(janus_plugin_session *handle, int video, char *buf
 					}
 				}
 			} else {
+                gint64 now = janus_get_monotonic_time();
 				/* Forward the frame to the peer */
 				if(send((video ? session->media.video_rtp_fd : session->media.audio_rtp_fd), buf, len, 0) < 0) {
 					rtp_header *header = (rtp_header *)&buf;
 					guint32 timestamp = ntohl(header->timestamp);
 					guint16 seq = ntohs(header->seq_number);
-					JANUS_LOG(LOG_HUGE, "[NoSIP-%p] Error sending %s RTP packet... %s (len=%d, ts=%"SCNu32", seq=%"SCNu16")...\n",
-						session, video ? "Video" : "Audio", strerror(errno), len, timestamp, seq);
+                    static gint64 now_prev = 0;
+                    if(now - now_prev > 5*G_USEC_PER_SEC) {
+                        JANUS_LOG(LOG_ERR, "[NoSIP-%p] Error sending %s RTP packet... %s (len=%d, ts=%"SCNu32", seq=%"SCNu16")...\n",
+                                  session, video ? "Video" : "Audio", strerror(errno), len, timestamp, seq);
+                        now_prev = now;
+                    }
+                 } else if (video) {
+                    static gint64 now_prev = 0;
+                    if(now - now_prev > 5*G_USEC_PER_SEC) {
+                        JANUS_LOG(LOG_INFO, "[NoSIP-%p] Video ice-receiving -> noSip-sending - ok\n", session);
+                        now_prev = now;
+                    }
 				}
 			}
 		}
