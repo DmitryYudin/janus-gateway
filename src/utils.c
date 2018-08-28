@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <inttypes.h>
+#include <time.h>
 
 #include "utils.h"
 #include "debug.h"
@@ -1001,3 +1002,15 @@ inline void janus_set4(guint8 *data,size_t i,guint32 val) {
 	data[i+1] = (guint8)(val>>16);
 	data[i]   = (guint8)(val>>24);
 }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+char* janus_date_str(char date[64], size_t n, const char* format)
+{
+	struct tm tmresult;
+	time_t ltime = time(NULL);
+	localtime_r(&ltime, &tmresult);
+	strftime(date, n, format, &tmresult);
+	return date;
+}
+#pragma GCC diagnostic pop

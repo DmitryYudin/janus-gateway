@@ -39,6 +39,7 @@
 #include "../config.h"
 #include "../mutex.h"
 #include "../utils.h"
+#include "../ws_log.h"
 
 
 /* Transport plugin information */
@@ -931,6 +932,8 @@ void *janus_websockets_thread(void *data) {
 
 	JANUS_LOG(LOG_INFO, "WebSockets thread started\n");
 
+	ws_log_init();
+
 	while(g_atomic_int_get(&initialized) && !g_atomic_int_get(&stopping)) {
 		/* libwebsockets is single thread, we cycle through events here */
 		lws_service(service, 50);
@@ -940,6 +943,9 @@ void *janus_websockets_thread(void *data) {
 	lws_cancel_service(service);
 	/* Done */
 	JANUS_LOG(LOG_INFO, "WebSockets thread ended\n");
+
+    ws_log_destroy();
+
 	return NULL;
 }
 
@@ -1066,6 +1072,9 @@ static int janus_websockets_common_callback(
 			/* If we got here, the message is complete: parse the JSON payload */
 			json_error_t error;
 			json_t *root = json_loads(ws_client->incoming, 0, &error);
+
+			ws_log_vprintf_json(WS_LOG_IN, ws_client->incoming);
+
 			g_free(ws_client->incoming);
 			ws_client->incoming = NULL;
 			/* Notify the core, passing both the object and, since it may be needed, the error */
@@ -1103,6 +1112,9 @@ static int janus_websockets_common_callback(
 				/* Shoot all the pending messages */
 				char *response = g_async_queue_try_pop(ws_client->messages);
 				if(response && !g_atomic_int_get(&ws_client->destroyed) && !g_atomic_int_get(&stopping)) {
+
+					ws_log_vprintf_json(WS_LOG_OUT, response);
+
 					/* Gotcha! */
 					int buflen = LWS_SEND_BUFFER_PRE_PADDING + strlen(response) + LWS_SEND_BUFFER_POST_PADDING;
 					if (buflen > ws_client->buflen) {

@@ -3301,8 +3301,11 @@ const char *__asan_default_options(void) {
 #endif
 
 /* Main */
+char global_log_prefix[64];
 gint main(int argc, char *argv[])
 {
+	janus_date_str(global_log_prefix, sizeof(global_log_prefix), "%Y-%m-%d_%H-%M-%S");
+
 	/* Core dumps may be disallowed by parent of this process; change that */
 	struct rlimit core_limits;
 	core_limits.rlim_cur = core_limits.rlim_max = RLIM_INFINITY;

@@ -138,6 +138,7 @@ set(SRC_JANUS
         ${DIR_SRC}/plugins/janus_nosip.c
         ${DIR_SRC}/transports/transport.c
         ${DIR_SRC}/transports/janus_websockets.c
+        ${DIR_SRC}/ws_log.c
 )
 set(ENABLE_ASAN 1)
 #set(ENABLE_TSAN 1)
