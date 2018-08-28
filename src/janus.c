@@ -1326,6 +1326,8 @@ int janus_process_incoming_request(janus_request *request) {
 			if(renegotiation)
 				json_object_set_new(body_jsep, "update", json_true());
 		}
+        janus_print_json(body, "janus: body");
+        janus_print_json(body_jsep, "janus: body_jsep");
 		janus_plugin_result *result = plugin_t->handle_message(handle->app_handle,
 			g_strdup((char *)transaction_text), body, body_jsep);
 		g_free(jsep_type);

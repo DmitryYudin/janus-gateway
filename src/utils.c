@@ -965,3 +965,36 @@ char* janus_date_str(char date[64], size_t n, const char* format)
 	return date;
 }
 #pragma GCC diagnostic pop
+
+void janus_print_json(const json_t* json, const char *header)
+{
+	return;
+
+	if(header) {
+		printf("%s\n", header);
+	}
+	if(!json) {
+        printf("NULL\n");
+    } else {
+		char *data = json_dumps(json, JSON_INDENT(2)|JSON_PRESERVE_ORDER);
+
+	#if 0
+		char* p = data;
+		while(*p != '\0') {
+			if(0 == strncmp("\\r\\n", p, 4)) {
+				p[0] = ' ';
+				p[1] = ' ';
+				p[2] = ' ';
+				p[3] = '\n';
+			} else {
+				p++;
+			}
+		}
+	#endif
+
+		printf("%s\n", data);
+		free(data);
+	}
+
+    fflush(stdout);
+}
