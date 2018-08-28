@@ -1212,6 +1212,11 @@ static void *janus_nosip_handler(void *data) {
 			if(!generate && session->media.ready) {
 				sdp_update = TRUE;
 			}
+
+			if(generate) {
+                janus_print_json(msg->jsep, "nosip: msg->jsep");
+            }
+
 			if(!msg_sdp) {
 				JANUS_LOG(LOG_ERR, "Missing SDP\n");
 				error_code = JANUS_NOSIP_ERROR_MISSING_SDP;

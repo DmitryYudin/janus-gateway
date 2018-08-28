@@ -322,5 +322,6 @@ void janus_set3(guint8 *data, size_t i, guint32 val);
 void janus_set4(guint8 *data, size_t i, guint32 val);
 
 char* janus_date_str(char date[64], size_t n, const char* format);
+void janus_print_json(const json_t* json, const char *header);
 
 #endif
