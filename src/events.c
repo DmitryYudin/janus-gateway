@@ -11,6 +11,9 @@
  */
 
 #include <stdarg.h>
+#include <string.h>
+#include <stdio.h>
+#include <errno.h>
 
 #include "events.h"
 #include "utils.h"
@@ -42,7 +45,9 @@ static json_t exit_event;
 static GThread *events_thread;
 void *janus_events_thread(void *data);
 
-int janus_events_init(gboolean enabled, char *server_name, GHashTable *handlers) {
+#define FILE_EVENTHANDLERS ((GHashTable *)1)
+
+int janus_events_init(gboolean enabled, const char *server_name, GHashTable *handlers) {
 	eventsenabled = enabled;
 	if(eventsenabled) {
 		events = g_async_queue_new();
@@ -58,6 +63,10 @@ int janus_events_init(gboolean enabled, char *server_name, GHashTable *handlers)
 			g_async_queue_unref(events);
 			JANUS_LOG(LOG_ERR, "Got error %d (%s) trying to launch the Events handler thread...\n", error->code, error->message ? error->message : "??");
 			return -1;
+		}
+
+		if(server_name && 0 == strcmp("file", server_name)) {
+			eventhandlers = FILE_EVENTHANDLERS; // dirty hack
 		}
 	}
 	JANUS_LOG(LOG_INFO, "%s, %s\n", janus_events_type_to_label(JANUS_EVENT_TYPE_SESSION),
@@ -104,7 +113,7 @@ void janus_events_notify_handlers(int type, guint64 session_id, ...) {
 	va_list args;
 	va_start(args, session_id);
 
-	if(!eventsenabled || eventhandlers == NULL || g_hash_table_size(eventhandlers) == 0) {
+	if(!eventsenabled || eventhandlers == NULL || (eventhandlers != FILE_EVENTHANDLERS && g_hash_table_size(eventhandlers) == 0)) {
 		/* Event handlers disabled, or no event handler plugins available: free resources, if needed */
 		if(type == JANUS_EVENT_TYPE_MEDIA || type == JANUS_EVENT_TYPE_WEBRTC) {
 			/* These events allocate a json_t object for their data, skip some arguments and unref it */
@@ -147,10 +156,32 @@ void janus_events_notify_handlers(int type, guint64 session_id, ...) {
 
 	/* Prepare the event to notify as a Jansson json_t object */
 	json_t *event = json_object();
-	if(server != NULL)
+	if(server != NULL && eventhandlers != FILE_EVENTHANDLERS)
 		json_object_set_new(event, "emitter", json_string(server));
 	json_object_set_new(event, "type", json_integer(type));
-	json_object_set_new(event, "timestamp", json_integer(janus_get_real_time()));
+	{
+		const char *type_str = NULL;
+		switch(type) {
+			case JANUS_EVENT_TYPE_NONE			: type_str = "TYPE_NONE"; break;
+			case JANUS_EVENT_TYPE_SESSION		: type_str = "TYPE_SESSION"; break;
+			case JANUS_EVENT_TYPE_HANDLE		: type_str = "TYPE_HANDLE"; break;
+			case JANUS_EVENT_TYPE_EXTERNAL		: type_str = "TYPE_EXTERNAL"; break;
+			case JANUS_EVENT_TYPE_JSEP			: type_str = "TYPE_JSEP"; break;
+			case JANUS_EVENT_TYPE_WEBRTC		: type_str = "TYPE_WEBRTC"; break;
+			case JANUS_EVENT_TYPE_MEDIA			: type_str = "TYPE_MEDIA"; break;
+			case JANUS_EVENT_TYPE_PLUGIN		: type_str = "TYPE_PLUGIN"; break;
+			case JANUS_EVENT_TYPE_TRANSPORT		: type_str = "TYPE_TRANSPORT"; break;
+			case JANUS_EVENT_TYPE_CORE			: type_str = "TYPE_CORE"; break;
+			default								: type_str = "Unknown type"; break;
+		}
+		json_object_set_new(event, "type_str", json_string(type_str));
+	}
+
+	char time_str[64];
+    janus_date_str(time_str, sizeof(time_str), "%H-%M-%S");
+    json_object_set_new(event, "timestamp_hms", json_string(janus_date_str(time_str, sizeof(time_str), "%H-%M-%S")));
+    json_object_set_new(event, "timestamp", json_integer(janus_get_real_time()));
+
 	if(type != JANUS_EVENT_TYPE_CORE && type != JANUS_EVENT_TYPE_EXTERNAL) {
 		/* Core and Admin API originated events don't have a session ID */
 		if(session_id == 0 && (type == JANUS_EVENT_TYPE_PLUGIN || type == JANUS_EVENT_TYPE_TRANSPORT)) {
@@ -282,6 +313,7 @@ void janus_events_notify_handlers(int type, guint64 session_id, ...) {
 void *janus_events_thread(void *data) {
 	JANUS_LOG(LOG_VERB, "Joining Events handler thread\n");
 	json_t *event = NULL;
+    FILE *log_file = NULL;
 
 	while(eventsenabled) {
 		/* Any event in queue? */
@@ -293,19 +325,43 @@ void *janus_events_thread(void *data) {
 
 		/* Notify all interested handlers, increasing the event reference to make sure it's not lost because of errors */
 		int type = json_integer_value(json_object_get(event, "type"));
-		GHashTableIter iter;
-		gpointer value;
-		g_hash_table_iter_init(&iter, eventhandlers);
-		json_incref(event);
-		while(g_hash_table_iter_next(&iter, NULL, &value)) {
-			janus_eventhandler *e = value;
-			if(e == NULL)
-				continue;
-			if(!janus_flags_is_set(&e->events_mask, type))
-				continue;
-			e->incoming_event(event);
+		if(eventhandlers != FILE_EVENTHANDLERS) {
+			GHashTableIter iter;
+			gpointer value;
+			g_hash_table_iter_init(&iter, eventhandlers);
+			json_incref(event);
+			while(g_hash_table_iter_next(&iter, NULL, &value)) {
+				janus_eventhandler *e = value;
+				if(e == NULL)
+					continue;
+				if(!janus_flags_is_set(&e->events_mask, type))
+					continue;
+				e->incoming_event(event);
+			}
+			json_decref(event);
+		} else {
+			if(!log_file) {
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnested-externs"
+#endif
+				extern char global_log_prefix[64];
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+				char logpath[256];
+				sprintf(logpath, "%s/%s_events.log", getenv("HOME"), global_log_prefix);
+				log_file = fopen(logpath, "awt");
+				if(log_file == NULL) {
+					g_print("Error opening log file %s: %s\n", logpath, strerror(errno));
+					break;
+				}
+			}
+			char* data = json_dumps(event, JSON_INDENT(2)|JSON_PRESERVE_ORDER);
+			fprintf(log_file, "%s\n", data);
+			fflush(log_file);
+			free(data);
 		}
-		json_decref(event);
 
 		/* Unref the final event reference, interested handlers will have their own reference */
 		json_decref(event);
@@ -316,6 +372,10 @@ void *janus_events_thread(void *data) {
 		if(event != &exit_event)
 			json_decref(event);
 	}
+
+    if(log_file ) {
+        fclose(log_file);
+    }
 
 	JANUS_LOG(LOG_VERB, "Leaving Events handler thread\n");
 	return NULL;

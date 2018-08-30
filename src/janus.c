@@ -3989,6 +3989,8 @@ gint main(int argc, char *argv[])
 	/* Wait 120 seconds before stopping idle threads to avoid the creation of too many threads for AddressSanitizer. */
 	g_thread_pool_set_max_idle_time(120 * 1000);
 
+#define STATIC_EVENT_HANDLER 1
+#if !STATIC_EVENT_HANDLER
 	/* Load event handlers */
 	const char *path = NULL;
 	DIR *dir = NULL;
@@ -4140,6 +4142,13 @@ gint main(int argc, char *argv[])
 			exit(1);
 		}
 	}
+#else
+    gboolean enable_events = TRUE;
+    if(janus_events_init(enable_events, "file", NULL) < 0) {
+        JANUS_LOG(LOG_FATAL, "Error initializing the Event handlers mechanism...\n");
+        exit(1);
+    }
+#endif
 
 #define STATIC_NOSIP 1
 
