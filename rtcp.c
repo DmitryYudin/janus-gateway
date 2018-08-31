@@ -163,7 +163,7 @@ static void janus_rtcp_rr_update_stats(rtcp_context *ctx, janus_report_block rb)
 		if(lost < 0) {
 			lost = 0;
 		}
-		double media_link_q = 100.0 - (100.0 * lost / (double)expect);
+		double media_link_q = expect ? 100.0 - (100.0 * lost / (double)expect) : 0;
 		ctx->out_media_link_quality = janus_rtcp_link_quality_filter(ctx->out_media_link_quality, media_link_q);
 		JANUS_LOG(LOG_HUGE, "Out link quality=%"SCNu32", media link quality=%"SCNu32"\n", janus_rtcp_context_get_out_link_quality(ctx), janus_rtcp_context_get_out_media_link_quality(ctx));
 	}
