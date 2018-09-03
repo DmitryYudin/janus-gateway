@@ -3292,6 +3292,14 @@ static gboolean install_transport(janus_transport *janus_transport)
     return TRUE;
 }
 
+#if __SANITIZE_ADDRESS__
+/* disable fast_unwind to enable correct stack view if reported memory was allocated in *.so module */
+const char *__asan_default_options(void);
+const char *__asan_default_options(void) {
+	return "symbolize=1:fast_unwind_on_malloc=0";
+}
+#endif
+
 /* Main */
 gint main(int argc, char *argv[])
 {
