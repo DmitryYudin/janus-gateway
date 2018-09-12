@@ -263,8 +263,11 @@ static gboolean notify_events = TRUE;
 static janus_callbacks *gateway = NULL;
 
 static char *local_ip = NULL;
-static uint16_t rtp_range_min = 10000;
-static uint16_t rtp_range_max = 60000;
+#define DEFAULT_RTP_RANGE_MIN 10000
+#define DEFAULT_RTP_RANGE_MAX 60000
+static uint16_t rtp_range_min = DEFAULT_RTP_RANGE_MIN;
+static uint16_t rtp_range_max = DEFAULT_RTP_RANGE_MAX;
+static uint16_t rtp_range_slider = DEFAULT_RTP_RANGE_MIN;
 
 static GThread *handler_thread;
 static void *janus_nosip_handler(void *data);
@@ -658,8 +661,15 @@ int janus_nosip_init(janus_callbacks *callback, const char *config_path) {
 				rtp_range_min = rtp_range_max;
 				rtp_range_max = temp_port;
 			}
+			if(rtp_range_min % 2)
+				rtp_range_min++;	/* Pick an even port for RTP */
+			if(rtp_range_min > rtp_range_max) {
+				JANUS_LOG(LOG_VERB, "Wrong port range: %u -- %u\n", rtp_range_min, rtp_range_max);
+				return -1;
+			}
 			if(rtp_range_max == 0)
 				rtp_range_max = 65535;
+			rtp_range_slider = rtp_range_min;
 			JANUS_LOG(LOG_VERB, "NoSIP RTP/RTCP port range: %u -- %u\n", rtp_range_min, rtp_range_max);
 		}
 
@@ -1843,12 +1853,17 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 		}
 	}
 	/* Start */
-	int attempts = 100;	/* FIXME Don't retry forever */
+	uint16_t rtp_port_next = rtp_range_slider; /* read global slider */
+	uint16_t rtp_port_start = rtp_port_next;
+	gboolean rtp_port_wrap = FALSE;
 	if(session->media.has_audio) {
 		JANUS_LOG(LOG_VERB, "Allocating audio ports:\n");
 		while(session->media.local_audio_rtp_port == 0 || session->media.local_audio_rtcp_port == 0) {
-			if(attempts == 0)	/* Too many failures */
+			if(rtp_port_wrap && rtp_port_next >= rtp_port_start) {/* Full range scanned */
+				JANUS_LOG(LOG_ERR, "No ports available for audio channel in range: %u -- %u\n",
+						  rtp_range_min, rtp_range_max);
 				return -1;
+			}
 			if(session->media.audio_rtp_fd == -1) {
 				session->media.audio_rtp_fd = socket(AF_INET, SOCK_DGRAM, 0);
 			}
@@ -1859,19 +1874,22 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 				JANUS_LOG(LOG_ERR, "Error creating audio sockets...\n");
 				return -1;
 			}
-			int rtp_port = g_random_int_range(rtp_range_min, rtp_range_max);
-			if(rtp_port % 2)
-				rtp_port++;	/* Pick an even port for RTP */
+			int rtp_port = rtp_port_next;
+			if((uint32_t)(rtp_port_next + 2UL) < rtp_range_max) {
+				rtp_port_next += 2;
+			} else {
+				rtp_port_next = rtp_range_min;
+				rtp_port_wrap = TRUE;
+			}
 			int rtcp_port = rtp_port+1;
 			if(bind_socket_pair(session->media.audio_rtp_fd, session->media.audio_rtcp_fd, rtp_port, rtcp_port)) {
-				JANUS_LOG(LOG_ERR, "Bind failed for audio (rtp_port %d, rtcp_port %d), trying a different one...\n",
+				JANUS_LOG(LOG_VERB, "Bind failed for audio (rtp_port %d, rtcp_port %d), trying a different one...\n",
 					rtp_port, rtcp_port);
 				/* RTP socket is not valid anymore, reset it */
 				close(session->media.audio_rtp_fd);
 				session->media.audio_rtp_fd = -1;
 				close(session->media.audio_rtcp_fd);
 				session->media.audio_rtcp_fd = -1;
-				attempts--;
 				continue;
 			}
 			JANUS_LOG(LOG_VERB, "Audio RTP listener bound to port %d\n", rtp_port);
@@ -1883,8 +1901,11 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 	if(session->media.has_video) {
 		JANUS_LOG(LOG_VERB, "Allocating video ports:\n");
 		while(session->media.local_video_rtp_port == 0 || session->media.local_video_rtcp_port == 0) {
-			if(attempts == 0)	/* Too many failures */
+			if(rtp_port_wrap && rtp_port_next >= rtp_port_start) { /* Full range scanned */
+				JANUS_LOG(LOG_ERR, "No ports available for video channel in range: %u -- %u\n",
+						  rtp_range_min, rtp_range_max);
 				return -1;
+			}
 			if(session->media.video_rtp_fd == -1) {
 				session->media.video_rtp_fd = socket(AF_INET, SOCK_DGRAM, 0);
 			}
@@ -1895,19 +1916,22 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 				JANUS_LOG(LOG_ERR, "Error creating video sockets...\n");
 				return -1;
 			}
-			int rtp_port = g_random_int_range(rtp_range_min, rtp_range_max);
-			if(rtp_port % 2)
-				rtp_port++;	/* Pick an even port for RTP */
+			int rtp_port = rtp_port_next;
+			if((uint32_t)(rtp_port_next + 2UL) < rtp_range_max) {
+				rtp_port_next += 2;
+			} else {
+				rtp_port_next = rtp_range_min;
+				rtp_port_wrap = TRUE;
+			}
 			int rtcp_port = rtp_port+1;
 			if(bind_socket_pair(session->media.video_rtp_fd, session->media.video_rtcp_fd, rtp_port, rtcp_port)) {
-				JANUS_LOG(LOG_ERR, "Bind failed for video (rtp_port %d, rtcp_port %d), trying a different one...\n",
+				JANUS_LOG(LOG_VERB, "Bind failed for video (rtp_port %d, rtcp_port %d), trying a different one...\n",
 					rtp_port, rtcp_port);
 				/* RTP socket is not valid anymore, reset it */
 				close(session->media.video_rtp_fd);
 				session->media.video_rtp_fd = -1;
 				close(session->media.video_rtcp_fd);
 				session->media.video_rtcp_fd = -1;
-				attempts--;
 				continue;
 			}
 			JANUS_LOG(LOG_VERB, "Video RTP listener bound to port %d\n", rtp_port);
@@ -1916,6 +1940,8 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 			session->media.local_video_rtcp_port = rtcp_port;
 		}
 	}
+	rtp_range_slider = rtp_port_next; /* write global slider */
+
 	/* We need this to quickly interrupt the poll when it's time to update a session or wrap up */
 	if(!update) {
 		pipe(session->media.pipefd);
