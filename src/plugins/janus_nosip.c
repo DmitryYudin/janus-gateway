@@ -1781,6 +1781,28 @@ char *janus_nosip_sdp_manipulate(janus_nosip_session *session, janus_sdp *sdp, g
 	return janus_sdp_write(sdp);
 }
 
+static int bind_socket(int fd, int port) {
+	struct sockaddr_in rtp_address;
+	rtp_address.sin_family = AF_INET;
+	rtp_address.sin_port = htons(port);
+	inet_pton(AF_INET, local_ip, &rtp_address.sin_addr.s_addr);
+	if(bind(fd, (struct sockaddr *)(&rtp_address), sizeof(struct sockaddr)) < 0) {
+		JANUS_LOG(LOG_VERB, "Bind failed (port %d)\n", port);
+		return -1;
+	}
+	return 0;
+}
+
+static int bind_socket_pair(int rtp_fd, int rtcp_fd, int rtp_port, int rtcp_port) {
+	if(bind_socket(rtp_fd, rtp_port)) {
+		return -1;
+	}
+	if(bind_socket(rtcp_fd, rtcp_port)) {
+		return -1;
+	}
+	return 0;
+}
+
 /* Bind local RTP/RTCP sockets */
 static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboolean update) {
 	if(session == NULL) {
@@ -1824,7 +1846,6 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 	int attempts = 100;	/* FIXME Don't retry forever */
 	if(session->media.has_audio) {
 		JANUS_LOG(LOG_VERB, "Allocating audio ports:\n");
-		struct sockaddr_in audio_rtp_address, audio_rtcp_address;
 		while(session->media.local_audio_rtp_port == 0 || session->media.local_audio_rtcp_port == 0) {
 			if(attempts == 0)	/* Too many failures */
 				return -1;
@@ -1841,23 +1862,10 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 			int rtp_port = g_random_int_range(rtp_range_min, rtp_range_max);
 			if(rtp_port % 2)
 				rtp_port++;	/* Pick an even port for RTP */
-			audio_rtp_address.sin_family = AF_INET;
-			audio_rtp_address.sin_port = htons(rtp_port);
-			inet_pton(AF_INET, local_ip, &audio_rtp_address.sin_addr.s_addr);
-			if(bind(session->media.audio_rtp_fd, (struct sockaddr *)(&audio_rtp_address), sizeof(struct sockaddr)) < 0) {
-				JANUS_LOG(LOG_ERR, "Bind failed for audio RTP (port %d), trying a different one...\n", rtp_port);
-				close(session->media.audio_rtp_fd);
-				session->media.audio_rtp_fd = -1;
-				attempts--;
-				continue;
-			}
-			JANUS_LOG(LOG_VERB, "Audio RTP listener bound to port %d\n", rtp_port);
 			int rtcp_port = rtp_port+1;
-			audio_rtcp_address.sin_family = AF_INET;
-			audio_rtcp_address.sin_port = htons(rtcp_port);
-			inet_pton(AF_INET, local_ip, &audio_rtcp_address.sin_addr.s_addr);
-			if(bind(session->media.audio_rtcp_fd, (struct sockaddr *)(&audio_rtcp_address), sizeof(struct sockaddr)) < 0) {
-				JANUS_LOG(LOG_ERR, "Bind failed for audio RTCP (port %d), trying a different one...\n", rtcp_port);
+			if(bind_socket_pair(session->media.audio_rtp_fd, session->media.audio_rtcp_fd, rtp_port, rtcp_port)) {
+				JANUS_LOG(LOG_ERR, "Bind failed for audio (rtp_port %d, rtcp_port %d), trying a different one...\n",
+					rtp_port, rtcp_port);
 				/* RTP socket is not valid anymore, reset it */
 				close(session->media.audio_rtp_fd);
 				session->media.audio_rtp_fd = -1;
@@ -1866,6 +1874,7 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 				attempts--;
 				continue;
 			}
+			JANUS_LOG(LOG_VERB, "Audio RTP listener bound to port %d\n", rtp_port);
 			JANUS_LOG(LOG_VERB, "Audio RTCP listener bound to port %d\n", rtcp_port);
 			session->media.local_audio_rtp_port = rtp_port;
 			session->media.local_audio_rtcp_port = rtcp_port;
@@ -1873,7 +1882,6 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 	}
 	if(session->media.has_video) {
 		JANUS_LOG(LOG_VERB, "Allocating video ports:\n");
-		struct sockaddr_in video_rtp_address, video_rtcp_address;
 		while(session->media.local_video_rtp_port == 0 || session->media.local_video_rtcp_port == 0) {
 			if(attempts == 0)	/* Too many failures */
 				return -1;
@@ -1890,23 +1898,10 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 			int rtp_port = g_random_int_range(rtp_range_min, rtp_range_max);
 			if(rtp_port % 2)
 				rtp_port++;	/* Pick an even port for RTP */
-			video_rtp_address.sin_family = AF_INET;
-			video_rtp_address.sin_port = htons(rtp_port);
-			inet_pton(AF_INET, local_ip, &video_rtp_address.sin_addr.s_addr);
-			if(bind(session->media.video_rtp_fd, (struct sockaddr *)(&video_rtp_address), sizeof(struct sockaddr)) < 0) {
-				JANUS_LOG(LOG_ERR, "Bind failed for video RTP (port %d), trying a different one...\n", rtp_port);
-				close(session->media.video_rtp_fd);
-				session->media.video_rtp_fd = -1;
-				attempts--;
-				continue;
-			}
-			JANUS_LOG(LOG_VERB, "Video RTP listener bound to port %d\n", rtp_port);
 			int rtcp_port = rtp_port+1;
-			video_rtcp_address.sin_family = AF_INET;
-			video_rtcp_address.sin_port = htons(rtcp_port);
-			inet_pton(AF_INET, local_ip, &video_rtcp_address.sin_addr.s_addr);
-			if(bind(session->media.video_rtcp_fd, (struct sockaddr *)(&video_rtcp_address), sizeof(struct sockaddr)) < 0) {
-				JANUS_LOG(LOG_ERR, "Bind failed for video RTCP (port %d), trying a different one...\n", rtcp_port);
+			if(bind_socket_pair(session->media.video_rtp_fd, session->media.video_rtcp_fd, rtp_port, rtcp_port)) {
+				JANUS_LOG(LOG_ERR, "Bind failed for video (rtp_port %d, rtcp_port %d), trying a different one...\n",
+					rtp_port, rtcp_port);
 				/* RTP socket is not valid anymore, reset it */
 				close(session->media.video_rtp_fd);
 				session->media.video_rtp_fd = -1;
@@ -1915,6 +1910,7 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 				attempts--;
 				continue;
 			}
+			JANUS_LOG(LOG_VERB, "Video RTP listener bound to port %d\n", rtp_port);
 			JANUS_LOG(LOG_VERB, "Video RTCP listener bound to port %d\n", rtcp_port);
 			session->media.local_video_rtp_port = rtp_port;
 			session->media.local_video_rtcp_port = rtcp_port;
