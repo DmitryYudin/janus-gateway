@@ -54,6 +54,10 @@ extern gboolean janus_log_colors;
 /*! \brief Maximum level of debugging */
 #define LOG_MAX LOG_DBG
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-variable"
+#endif
 /*! \brief Coloured prefixes for errors and warnings logging. */
 static const char *janus_log_prefix[] = {
 /* no colors */
@@ -75,6 +79,9 @@ static const char *janus_log_prefix[] = {
 	"",
 	""
 };
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
 ///@}
 
 /** @name Janus log wrappers
