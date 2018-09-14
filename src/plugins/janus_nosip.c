@@ -225,7 +225,7 @@ static janus_plugin janus_nosip_plugin =
 	);
 
 /* Plugin creator */
-janus_plugin *create(void) {
+janus_plugin *create_nosip_plugin(void) {
 	JANUS_LOG(LOG_VERB, "%s created!\n", JANUS_NOSIP_NAME);
 	return &janus_nosip_plugin;
 }

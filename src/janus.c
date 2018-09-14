@@ -49,6 +49,8 @@
 #define SHLIB_EXT ".so"
 #endif
 
+janus_plugin *create_nosip_plugin(void);
+janus_transport *create_websocket_transport(void);
 
 static janus_config *config = NULL;
 static char *config_file = NULL;
@@ -3156,6 +3158,94 @@ gboolean janus_plugin_auth_signature_contains(janus_plugin *plugin, const char *
 	return janus_auth_check_signature_contains(token, plugin->get_package(), descriptor);
 }
 
+static gboolean install_plugin(janus_plugin *janus_plugin)
+{
+    /* Are all the mandatory methods and callbacks implemented? */
+    if(!janus_plugin->init || !janus_plugin->destroy ||
+        !janus_plugin->get_api_compatibility ||
+        !janus_plugin->get_version ||
+        !janus_plugin->get_version_string ||
+        !janus_plugin->get_description ||
+        !janus_plugin->get_package ||
+        !janus_plugin->get_name ||
+        !janus_plugin->create_session ||
+        !janus_plugin->query_session ||
+        !janus_plugin->destroy_session ||
+        !janus_plugin->handle_message ||
+        !janus_plugin->setup_media ||
+        !janus_plugin->hangup_media) {
+        JANUS_LOG(LOG_ERR, "\tMissing some mandatory methods/callbacks, skipping this plugin...\n");
+        return FALSE;
+    }
+    if(janus_plugin->get_api_compatibility() < JANUS_PLUGIN_API_VERSION) {
+        JANUS_LOG(LOG_ERR, "The '%s' plugin was compiled against an older version of the API (%d < %d), skipping it: update it to enable it again\n",
+              janus_plugin->get_package(), janus_plugin->get_api_compatibility(), JANUS_PLUGIN_API_VERSION);
+        return FALSE;
+    }
+    if(janus_plugin->init(&janus_handler_plugin, configs_folder) < 0) {
+        JANUS_LOG(LOG_WARN, "The '%s' plugin could not be initialized\n", janus_plugin->get_package());
+        return FALSE;
+    }
+    JANUS_LOG(LOG_VERB, "\tVersion: %d (%s)\n", janus_plugin->get_version(), janus_plugin->get_version_string());
+    JANUS_LOG(LOG_VERB, "\t   [%s] %s\n", janus_plugin->get_package(), janus_plugin->get_name());
+    JANUS_LOG(LOG_VERB, "\t   %s\n", janus_plugin->get_description());
+    JANUS_LOG(LOG_VERB, "\t   Plugin API version: %d\n", janus_plugin->get_api_compatibility());
+    if(!janus_plugin->incoming_rtp && !janus_plugin->incoming_rtcp && !janus_plugin->incoming_data) {
+        JANUS_LOG(LOG_WARN, "The '%s' plugin doesn't implement any callback for RTP/RTCP/data... is this on purpose?\n",
+              janus_plugin->get_package());
+    }
+    if(!janus_plugin->incoming_rtp && !janus_plugin->incoming_rtcp && janus_plugin->incoming_data) {
+        JANUS_LOG(LOG_WARN, "The '%s' plugin will only handle data channels (no RTP/RTCP)... is this on purpose?\n",
+              janus_plugin->get_package());
+    }
+
+    if(plugins == NULL)
+        plugins = g_hash_table_new(g_str_hash, g_str_equal);
+    g_hash_table_insert(plugins, (gpointer)janus_plugin->get_package(), janus_plugin);
+
+    return TRUE;
+}
+static gboolean install_transport(janus_transport *janus_transport)
+{
+    /* Are all the mandatory methods and callbacks implemented? */
+    if(!janus_transport->init || !janus_transport->destroy ||
+       !janus_transport->get_api_compatibility ||
+       !janus_transport->get_version ||
+       !janus_transport->get_version_string ||
+       !janus_transport->get_description ||
+       !janus_transport->get_package ||
+       !janus_transport->get_name ||
+       !janus_transport->send_message ||
+       !janus_transport->is_janus_api_enabled ||
+       !janus_transport->is_admin_api_enabled ||
+       !janus_transport->session_created ||
+       !janus_transport->session_over ||
+       !janus_transport->session_claimed) {
+        JANUS_LOG(LOG_ERR, "\tMissing some mandatory methods/callbacks, skipping this transport plugin...\n");
+        return FALSE;
+    }
+    if(janus_transport->get_api_compatibility() < JANUS_TRANSPORT_API_VERSION) {
+        JANUS_LOG(LOG_ERR, "The '%s' transport plugin was compiled against an older version of the API (%d < %d), skipping it: update it to enable it again\n",
+                  janus_transport->get_package(), janus_transport->get_api_compatibility(), JANUS_TRANSPORT_API_VERSION);
+        return FALSE;
+    }
+    if(janus_transport->init(&janus_handler_transport, configs_folder) < 0) {
+        JANUS_LOG(LOG_WARN, "The '%s' plugin could not be initialized\n", janus_transport->get_package());
+        return FALSE;
+    }
+    JANUS_LOG(LOG_VERB, "\tVersion: %d (%s)\n", janus_transport->get_version(), janus_transport->get_version_string());
+    JANUS_LOG(LOG_VERB, "\t   [%s] %s\n", janus_transport->get_package(), janus_transport->get_name());
+    JANUS_LOG(LOG_VERB, "\t   %s\n", janus_transport->get_description());
+    JANUS_LOG(LOG_VERB, "\t   Plugin API version: %d\n", janus_transport->get_api_compatibility());
+    JANUS_LOG(LOG_VERB, "\t   Janus API: %s\n", janus_transport->is_janus_api_enabled() ? "enabled" : "disabled");
+    JANUS_LOG(LOG_VERB, "\t   Admin API: %s\n", janus_transport->is_admin_api_enabled() ? "enabled" : "disabled");
+
+    if(transports == NULL)
+        transports = g_hash_table_new(g_str_hash, g_str_equal);
+    g_hash_table_insert(transports, (gpointer)janus_transport->get_package(), janus_transport);
+
+    return TRUE;
+}
 
 /* Main */
 gint main(int argc, char *argv[])
@@ -4040,6 +4130,9 @@ gint main(int argc, char *argv[])
 		}
 	}
 
+#define STATIC_NOSIP 1
+
+#if !STATIC_NOSIP
 	/* Load plugins */
 	path = PLUGINDIR;
 	item = janus_config_get_item_drilldown(config, "general", "plugins_folder");
@@ -4106,48 +4199,12 @@ gint main(int argc, char *argv[])
 				JANUS_LOG(LOG_ERR, "\tCouldn't use function 'create'...\n");
 				continue;
 			}
-			/* Are all the mandatory methods and callbacks implemented? */
-			if(!janus_plugin->init || !janus_plugin->destroy ||
-					!janus_plugin->get_api_compatibility ||
-					!janus_plugin->get_version ||
-					!janus_plugin->get_version_string ||
-					!janus_plugin->get_description ||
-					!janus_plugin->get_package ||
-					!janus_plugin->get_name ||
-					!janus_plugin->create_session ||
-					!janus_plugin->query_session ||
-					!janus_plugin->destroy_session ||
-					!janus_plugin->handle_message ||
-					!janus_plugin->setup_media ||
-					!janus_plugin->hangup_media) {
-				JANUS_LOG(LOG_ERR, "\tMissing some mandatory methods/callbacks, skipping this plugin...\n");
-				continue;
+
+			if(!install_plugin(janus_plugin)) {
+                dlclose(plugin);
+                continue;
 			}
-			if(janus_plugin->get_api_compatibility() < JANUS_PLUGIN_API_VERSION) {
-				JANUS_LOG(LOG_ERR, "The '%s' plugin was compiled against an older version of the API (%d < %d), skipping it: update it to enable it again\n",
-					janus_plugin->get_package(), janus_plugin->get_api_compatibility(), JANUS_PLUGIN_API_VERSION);
-				continue;
-			}
-			if(janus_plugin->init(&janus_handler_plugin, configs_folder) < 0) {
-				JANUS_LOG(LOG_WARN, "The '%s' plugin could not be initialized\n", janus_plugin->get_package());
-				dlclose(plugin);
-				continue;
-			}
-			JANUS_LOG(LOG_VERB, "\tVersion: %d (%s)\n", janus_plugin->get_version(), janus_plugin->get_version_string());
-			JANUS_LOG(LOG_VERB, "\t   [%s] %s\n", janus_plugin->get_package(), janus_plugin->get_name());
-			JANUS_LOG(LOG_VERB, "\t   %s\n", janus_plugin->get_description());
-			JANUS_LOG(LOG_VERB, "\t   Plugin API version: %d\n", janus_plugin->get_api_compatibility());
-			if(!janus_plugin->incoming_rtp && !janus_plugin->incoming_rtcp && !janus_plugin->incoming_data) {
-				JANUS_LOG(LOG_WARN, "The '%s' plugin doesn't implement any callback for RTP/RTCP/data... is this on purpose?\n",
-					janus_plugin->get_package());
-			}
-			if(!janus_plugin->incoming_rtp && !janus_plugin->incoming_rtcp && janus_plugin->incoming_data) {
-				JANUS_LOG(LOG_WARN, "The '%s' plugin will only handle data channels (no RTP/RTCP)... is this on purpose?\n",
-					janus_plugin->get_package());
-			}
-			if(plugins == NULL)
-				plugins = g_hash_table_new(g_str_hash, g_str_equal);
-			g_hash_table_insert(plugins, (gpointer)janus_plugin->get_package(), janus_plugin);
+
 			if(plugins_so == NULL)
 				plugins_so = g_hash_table_new(g_str_hash, g_str_equal);
 			g_hash_table_insert(plugins_so, (gpointer)janus_plugin->get_package(), plugin);
@@ -4157,9 +4214,22 @@ gint main(int argc, char *argv[])
 	if(disabled_plugins != NULL)
 		g_strfreev(disabled_plugins);
 	disabled_plugins = NULL;
+#else
 
+    janus_plugin *janus_plugin = create_nosip_plugin();
+    if(!janus_plugin) {
+        JANUS_LOG(LOG_ERR, "\tCouldn't use function 'create'...\n");
+    } else {
+        install_plugin(janus_plugin);
+    }
+
+#endif
+
+#define STATIC_WEBSOCKET 1
+    gboolean janus_api_enabled = FALSE, admin_api_enabled = FALSE;
+
+#if !STATIC_WEBSOCKET
 	/* Load transports */
-	gboolean janus_api_enabled = FALSE, admin_api_enabled = FALSE;
 	path = TRANSPORTDIR;
 	item = janus_config_get_item_drilldown(config, "general", "transports_folder");
 	if(item && item->value)
@@ -4225,53 +4295,33 @@ gint main(int argc, char *argv[])
 				JANUS_LOG(LOG_ERR, "\tCouldn't use function 'create'...\n");
 				continue;
 			}
-			/* Are all the mandatory methods and callbacks implemented? */
-			if(!janus_transport->init || !janus_transport->destroy ||
-					!janus_transport->get_api_compatibility ||
-					!janus_transport->get_version ||
-					!janus_transport->get_version_string ||
-					!janus_transport->get_description ||
-					!janus_transport->get_package ||
-					!janus_transport->get_name ||
-					!janus_transport->send_message ||
-					!janus_transport->is_janus_api_enabled ||
-					!janus_transport->is_admin_api_enabled ||
-					!janus_transport->session_created ||
-					!janus_transport->session_over ||
-					!janus_transport->session_claimed) {
-				JANUS_LOG(LOG_ERR, "\tMissing some mandatory methods/callbacks, skipping this transport plugin...\n");
-				continue;
-			}
-			if(janus_transport->get_api_compatibility() < JANUS_TRANSPORT_API_VERSION) {
-				JANUS_LOG(LOG_ERR, "The '%s' transport plugin was compiled against an older version of the API (%d < %d), skipping it: update it to enable it again\n",
-					janus_transport->get_package(), janus_transport->get_api_compatibility(), JANUS_TRANSPORT_API_VERSION);
-				continue;
-			}
-			if(janus_transport->init(&janus_handler_transport, configs_folder) < 0) {
-				JANUS_LOG(LOG_WARN, "The '%s' plugin could not be initialized\n", janus_transport->get_package());
-				dlclose(transport);
-				continue;
-			}
-			JANUS_LOG(LOG_VERB, "\tVersion: %d (%s)\n", janus_transport->get_version(), janus_transport->get_version_string());
-			JANUS_LOG(LOG_VERB, "\t   [%s] %s\n", janus_transport->get_package(), janus_transport->get_name());
-			JANUS_LOG(LOG_VERB, "\t   %s\n", janus_transport->get_description());
-			JANUS_LOG(LOG_VERB, "\t   Plugin API version: %d\n", janus_transport->get_api_compatibility());
-			JANUS_LOG(LOG_VERB, "\t   Janus API: %s\n", janus_transport->is_janus_api_enabled() ? "enabled" : "disabled");
-			JANUS_LOG(LOG_VERB, "\t   Admin API: %s\n", janus_transport->is_admin_api_enabled() ? "enabled" : "disabled");
-			janus_api_enabled = janus_api_enabled || janus_transport->is_janus_api_enabled();
-			admin_api_enabled = admin_api_enabled || janus_transport->is_admin_api_enabled();
-			if(transports == NULL)
-				transports = g_hash_table_new(g_str_hash, g_str_equal);
-			g_hash_table_insert(transports, (gpointer)janus_transport->get_package(), janus_transport);
-			if(transports_so == NULL)
-				transports_so = g_hash_table_new(g_str_hash, g_str_equal);
-			g_hash_table_insert(transports_so, (gpointer)janus_transport->get_package(), transport);
+
+            if(!install_transport(janus_transport)) {
+                dlclose(transport);
+                continue;
+            }
+            janus_api_enabled = janus_api_enabled || janus_transport->is_janus_api_enabled();
+            admin_api_enabled = admin_api_enabled || janus_transport->is_admin_api_enabled();
+
+            if(transports_so == NULL)
+                transports_so = g_hash_table_new(g_str_hash, g_str_equal);
+            g_hash_table_insert(transports_so, (gpointer)janus_transport->get_package(), transport);
 		}
 	}
 	closedir(dir);
 	if(disabled_transports != NULL)
 		g_strfreev(disabled_transports);
 	disabled_transports = NULL;
+#else
+    janus_api_enabled = TRUE;
+    janus_transport *janus_transport = create_websocket_transport();
+    if(!janus_transport) {
+        JANUS_LOG(LOG_ERR, "\tCouldn't use function 'create'...\n");
+    } else {
+        install_transport(janus_transport);
+    }
+#endif
+
 	/* Make sure at least a Janus API transport is available */
 	if(!janus_api_enabled) {
 		JANUS_LOG(LOG_FATAL, "No Janus API transport is available... enable at least one and restart Janus\n");

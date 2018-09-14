@@ -92,7 +92,7 @@ static janus_transport janus_websockets_transport =
 	);
 
 /* Transport creator */
-janus_transport *create(void) {
+janus_transport *create_websocket_transport(void) {
 	JANUS_LOG(LOG_VERB, "%s created!\n", JANUS_WEBSOCKETS_NAME);
 	return &janus_websockets_transport;
 }

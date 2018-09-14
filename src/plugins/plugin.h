@@ -465,5 +465,6 @@ janus_plugin_result *janus_plugin_result_new(janus_plugin_result_type type, cons
 void janus_plugin_result_destroy(janus_plugin_result *result);
 ///@}
 
+janus_plugin *create_nosip_plugin(void);
 
 #endif
