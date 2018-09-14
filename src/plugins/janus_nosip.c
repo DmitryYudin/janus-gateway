@@ -1851,7 +1851,35 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 			close(session->media.pipefd[1]);
 			session->media.pipefd[1] = -1;
 		}
+
+		static unsigned session_count = 0;
+		static int fds[DEFAULT_RTP_RANGE_MAX - DEFAULT_RTP_RANGE_MIN + 1] = {0, };
+		if(session_count == 0) {
+			unsigned n_ports_locked = 0;
+			for(uint16_t port = rtp_range_min; port < rtp_range_max - 4; port++) {
+				int fd = socket(AF_INET, SOCK_DGRAM, 0);
+				if(fd == -1) {
+					// https://askubuntu.com/questions/162229/how-do-i-increase-the-open-files-limit-for-a-non-root-user
+					JANUS_LOG(LOG_ERR, "Error creating audio sockets... index = %d %s\n", port - DEFAULT_RTP_RANGE_MIN, strerror(errno));
+					continue;
+				}
+				if(bind_socket(fd, port)) {
+					continue;
+				}
+
+				fds[port - DEFAULT_RTP_RANGE_MIN] = fd;
+				n_ports_locked++;
+
+			}
+			JANUS_LOG(LOG_ERR, "-------------------------------------------\n");
+			JANUS_LOG(LOG_ERR, "number ports locked %u of %u\n", n_ports_locked, rtp_range_max - rtp_range_min);
+			JANUS_LOG(LOG_ERR, "-------------------------------------------\n");
+		}
+		session_count++;
 	}
+	uint64_t t_start = janus_get_monotonic_time();
+	unsigned num_iter = 0;
+
 	/* Start */
 	uint16_t rtp_port_next = rtp_range_slider; /* read global slider */
 	uint16_t rtp_port_start = rtp_port_next;
@@ -1874,6 +1902,7 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 				JANUS_LOG(LOG_ERR, "Error creating audio sockets...\n");
 				return -1;
 			}
+			num_iter++;
 			int rtp_port = rtp_port_next;
 			if((uint32_t)(rtp_port_next + 2UL) < rtp_range_max) {
 				rtp_port_next += 2;
@@ -1923,6 +1952,7 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 				rtp_port_next = rtp_range_min;
 				rtp_port_wrap = TRUE;
 			}
+			num_iter++;
 			int rtcp_port = rtp_port+1;
 			if(bind_socket_pair(session->media.video_rtp_fd, session->media.video_rtcp_fd, rtp_port, rtcp_port)) {
 				JANUS_LOG(LOG_VERB, "Bind failed for video (rtp_port %d, rtcp_port %d), trying a different one...\n",
@@ -1941,6 +1971,10 @@ static int janus_nosip_allocate_local_ports(janus_nosip_session *session, gboole
 		}
 	}
 	rtp_range_slider = rtp_port_next; /* write global slider */
+
+	uint64_t t_end = janus_get_monotonic_time();
+	printf("port allocation took %d ms, %5d iters executed, port_next=%d\n", (uint32_t)(1000*(t_end - t_start)/G_USEC_PER_SEC), num_iter, rtp_port_next);
+	fflush(stdout);
 
 	/* We need this to quickly interrupt the poll when it's time to update a session or wrap up */
 	if(!update) {
