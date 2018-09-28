@@ -174,6 +174,54 @@ void janus_vprintf(const char *format, ...) {
 	}
 	va_end(ap2);
 
+	const char *repl = "####";
+	const unsigned repl_len = (unsigned)strlen(repl);
+	{
+		unsigned nl_count = 0;
+		{
+			char *s = b->str;
+			while(*s) {
+				if(*s == '\n') {
+					nl_count++;
+				}
+				s++;
+			}
+		}
+		if(repl_len-1 == 0) {
+			char *s = b->str;
+			while(*s) {
+				if(*s == '\n' && *(s+1) != '\0') {
+					*s = ' ';
+				}
+				s++;
+			}
+		} else {
+			janus_log_buffer *b_orig = b;
+			b = janus_log_getbuf();
+			len += nl_count*(repl_len-1);
+			if(len >= b->allocated) {				
+				/* buffer wasn't big enough */
+				b = g_realloc(b, len + 1 + sizeof(*b));
+				b->allocated = len + 1;
+			}
+			const char *s = b_orig->str;
+			char *d = b->str;
+			while(*s) {
+				if(*s == '\n' && *(s+1) != '\0') {
+					unsigned i;
+					for(i = 0; i < repl_len; i++) {
+						*d++ = repl[i];
+					}
+				} else {
+					*d++ = *s;
+				}
+				s++;
+			}
+			*d = '\0';
+			janus_log_freebuffers(&b_orig);
+		}
+	}
+
 	g_mutex_lock(&lock);
 	if (!printhead) {
 		printhead = printtail = b;
