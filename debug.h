@@ -57,23 +57,23 @@ extern gboolean janus_log_colors;
 /*! \brief Coloured prefixes for errors and warnings logging. */
 static const char *janus_log_prefix[] = {
 /* no colors */
-	"",
+	"[NONE] ",
 	"[FATAL] ",
 	"[ERR] ",
 	"[WARN] ",
-	"",
-	"",
-	"",
-	"",
+	"[INFO] ",
+	"[VERB] ",
+	"[HUGE] ",
+	"[DBG] ",
 /* with colors */
-	"",
+	"[NONE] ",
 	ANSI_COLOR_MAGENTA "[FATAL]" ANSI_COLOR_RESET " ",
 	ANSI_COLOR_RED "[ERR]" ANSI_COLOR_RESET " ",
 	ANSI_COLOR_YELLOW "[WARN]" ANSI_COLOR_RESET " ",
-	"",
-	"",
-	"",
-	""
+	"[INFO] ",
+	"[VERB] ",
+	"[HUGE] ",
+	"[DBG] "
 };
 ///@}
 
