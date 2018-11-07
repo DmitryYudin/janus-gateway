@@ -172,7 +172,7 @@ int janus_rabbitmqevh_init(const char *config_path) {
 			/* Compact, so no spaces between separators */
 			json_format = JSON_COMPACT | JSON_PRESERVE_ORDER;
 		} else {
-			JANUS_LOG(LOG_WARN, "Unsupported JSON format option '%s', using default (indented)\n", item->value);
+			JANUS_LOG(LOG_WARN, "RabbitMQEventHandler: Unsupported JSON format option '%s', using default (indented)\n", item->value);
 			json_format = JSON_INDENT(3) | JSON_PRESERVE_ORDER;
 		}
 	}
@@ -303,7 +303,7 @@ int janus_rabbitmqevh_init(const char *config_path) {
 	JANUS_LOG(LOG_VERB, "RabbitMQEventHandler: Connecting to RabbitMQ server...\n");
 	status = amqp_socket_open(socket, rmqhost, rmqport);
 	if(status != AMQP_STATUS_OK) {
-		JANUS_LOG(LOG_FATAL, "Can't connect to RabbitMQ server: error opening socket... (%s)\n", amqp_error_string2(status));
+		JANUS_LOG(LOG_FATAL, "RabbitMQEventHandler: Can't connect to RabbitMQ server: error opening socket... (%s)\n", amqp_error_string2(status));
 		goto error;
 	}
 	JANUS_LOG(LOG_VERB, "RabbitMQEventHandler: Logging in...\n");
@@ -313,7 +313,7 @@ int janus_rabbitmqevh_init(const char *config_path) {
 		goto error;
 	}
 	rmq_channel = 1;
-	JANUS_LOG(LOG_VERB, "Opening channel...\n");
+	JANUS_LOG(LOG_VERB, "RabbitMQEventHandler: Opening channel...\n");
 	amqp_channel_open(rmq_conn, rmq_channel);
 	result = amqp_get_rpc_reply(rmq_conn);
 	if(result.reply_type != AMQP_RESPONSE_NORMAL) {
@@ -331,7 +331,7 @@ int janus_rabbitmqevh_init(const char *config_path) {
 			goto error;
 		}
 	}
-	JANUS_LOG(LOG_VERB, "Declaring outgoing queue... (%s)\n", route_key);
+	JANUS_LOG(LOG_VERB, "RabbitMQEventHandler: Declaring outgoing queue... (%s)\n", route_key);
 	rmq_route_key = amqp_cstring_bytes(route_key);
 	amqp_queue_declare(rmq_conn, rmq_channel, rmq_route_key, 0, 0, 0, 0, amqp_empty_table);
 	result = amqp_get_rpc_reply(rmq_conn);
@@ -491,7 +491,7 @@ json_t *janus_rabbitmqevh_handle_request(json_t *request) {
 		if(json_object_get(request, "grouping"))
 			group_events = json_is_true(json_object_get(request, "grouping"));
 	} else {
-		JANUS_LOG(LOG_VERB, "Unknown request '%s'\n", request_text);
+		JANUS_LOG(LOG_VERB, "RabbitMQEventHandler: Unknown request '%s'\n", request_text);
 		error_code = JANUS_RABBITMQEVH_ERROR_INVALID_REQUEST;
 		g_snprintf(error_cause, 512, "Unknown request '%s'", request_text);
 	}
