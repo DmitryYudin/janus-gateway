@@ -224,7 +224,6 @@ int janus_sampleevh_init(const char *config_path) {
 	janus_config_destroy(config);
 	config = NULL;
 	if(!enabled) {
-		JANUS_LOG(LOG_FATAL, "Sample event handler not enabled/needed, giving up...\n");
 		return -1;	/* No point in keeping the plugin loaded */
 	}
 	JANUS_LOG(LOG_VERB, "Sample event handler configured: %s\n", backend);
