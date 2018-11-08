@@ -430,6 +430,7 @@ error:
 
 static void prom_process_event(json_t *event)
 {
+	JANUS_LOG(LOG_WARN, "-------------------------------- Got message\n");
 	int type = json_integer_value(json_object_get(event, "type"));
 	PromEventIdx idx = janus_event_type_to_index(type);
 	prom_event_counters[idx]->Increment();

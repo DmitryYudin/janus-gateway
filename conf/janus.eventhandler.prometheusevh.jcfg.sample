@@ -1,7 +1,7 @@
 # This configures the Prometheus event handler.
 
 general: {
-	enabled = no				# By default the module is not enabled
+	enabled = yes				# By default the module is not enabled
 	events = all				# Comma separated list of the events mask you're interested
 								# in. Valid values are none, sessions, handles, jsep, webrtc,
 								# media, plugins, transports, core, external and all. By
