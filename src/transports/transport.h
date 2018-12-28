@@ -288,4 +288,6 @@ struct janus_transport_callbacks {
 /*! \brief The hook that transport plugins need to implement to be created from the Janus core */
 typedef janus_transport* create_t(void);
 
+janus_transport *create_websocket_transport(void);
+
 #endif
