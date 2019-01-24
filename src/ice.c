@@ -2254,13 +2254,17 @@ static void janus_ice_cb_nice_recv(NiceAgent *agent, guint stream_id, guint comp
 					packet_ssrc = stream->video_ssrc_peer[vindex];
 					header->ssrc = htonl(packet_ssrc);
 					memcpy(&header->seq_number, payload, 2);
-					/* Finally, remove the original sequence number from the payload: rather than moving
-					 * the whole payload back two bytes, we shift the header forward (less bytes to move) */
-					buflen -= 2;
-					size_t hsize = payload-buf;
-					memmove(buf+2, buf, hsize);
-					buf += 2;
-					header = (janus_rtp_header *)buf;
+					if(0){
+						/* Finally, remove the original sequence number from the payload: rather than moving
+						 * the whole payload back two bytes, we shift the header forward (less bytes to move) */
+						buflen -= 2;
+						size_t hsize = payload-buf;
+						memmove(buf+2, buf, hsize);
+						buf += 2;
+						header = (janus_rtp_header *)buf;
+					} else {
+						memmove(payload, payload+2, plen-2);
+					}
 				}
 				/* Check if we need to handle transport wide cc */
 				if(stream->do_transport_wide_cc) {
