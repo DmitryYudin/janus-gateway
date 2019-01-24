@@ -33,7 +33,7 @@
 #define JANUS_RABBITMQEVH_PACKAGE			"janus.eventhandler.rabbitmqevh"
 
 /* Plugin methods */
-janus_eventhandler *create(void);
+janus_eventhandler *create_rabbitmqevh(void);
 int janus_rabbitmqevh_init(const char *config_path);
 void janus_rabbitmqevh_destroy(void);
 int janus_rabbitmqevh_get_api_compatibility(void);
@@ -67,7 +67,7 @@ static janus_eventhandler janus_rabbitmqevh =
 	);
 
 /* Plugin creator */
-janus_eventhandler *create(void) {
+janus_eventhandler *create_rabbitmqevh(void) {
 	JANUS_LOG(LOG_VERB, "%s created!\n", JANUS_RABBITMQEVH_NAME);
 	return &janus_rabbitmqevh;
 }

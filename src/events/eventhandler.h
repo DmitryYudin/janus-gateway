@@ -235,5 +235,6 @@ struct janus_eventhandler {
 
 /*! \brief The hook that event handler plugins need to implement to be created from the Janus core */
 typedef janus_eventhandler* create_e(void);
+janus_eventhandler *create_rabbitmqevh(void);
 
 #endif

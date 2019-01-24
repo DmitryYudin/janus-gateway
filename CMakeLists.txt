@@ -139,6 +139,7 @@ set(SRC_JANUS
         ${DIR_SRC}/transports/transport.c
         ${DIR_SRC}/transports/janus_websockets.c
         ${DIR_SRC}/ws_log.c
+		${DIR_SRC}/events/janus_rabbitmqevh.c 
 )
 set(ENABLE_ASAN 1)
 #set(ENABLE_TSAN 1)
@@ -190,6 +191,7 @@ set(LIBS
 	crypto
 	srtp2
 	websockets
+	rabbitmq
 )
 add_executable(${JANUS_EXE} ${DIR_SRC}/janus.c)
 target_link_libraries(${JANUS_EXE} ${JANUS_LIB} ${LIBS})

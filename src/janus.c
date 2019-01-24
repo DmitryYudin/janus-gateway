@@ -3292,6 +3292,55 @@ static gboolean install_transport(janus_transport *janus_transport)
     return TRUE;
 }
 
+static gboolean install_eventhandler(janus_eventhandler *janus_eventhandler)
+{
+	/* Are all the mandatory methods and callbacks implemented? */
+	if(!janus_eventhandler->init || !janus_eventhandler->destroy ||
+	   !janus_eventhandler->get_api_compatibility ||
+	   !janus_eventhandler->get_version ||
+	   !janus_eventhandler->get_version_string ||
+	   !janus_eventhandler->get_description ||
+	   !janus_eventhandler->get_package ||
+	   !janus_eventhandler->get_name ||
+	   !janus_eventhandler->incoming_event) {
+		JANUS_LOG(LOG_ERR, "\tMissing some mandatory methods/callbacks, skipping this event handler plugin...\n");
+		return FALSE;
+	}
+	if(janus_eventhandler->get_api_compatibility() < JANUS_EVENTHANDLER_API_VERSION) {
+		JANUS_LOG(LOG_ERR, "The '%s' event handler plugin was compiled against an older version of the API (%d < %d), skipping it: update it to enable it again\n",
+				  janus_eventhandler->get_package(), janus_eventhandler->get_api_compatibility(), JANUS_EVENTHANDLER_API_VERSION);
+		return FALSE;
+	}
+	janus_eventhandler->init(configs_folder);
+	JANUS_LOG(LOG_VERB, "\tVersion: %d (%s)\n", janus_eventhandler->get_version(), janus_eventhandler->get_version_string());
+	JANUS_LOG(LOG_VERB, "\t   [%s] %s\n", janus_eventhandler->get_package(), janus_eventhandler->get_name());
+	JANUS_LOG(LOG_VERB, "\t   %s\n", janus_eventhandler->get_description());
+	JANUS_LOG(LOG_VERB, "\t   Plugin API version: %d\n", janus_eventhandler->get_api_compatibility());
+	JANUS_LOG(LOG_VERB, "\t   Subscriptions:");
+	if(janus_eventhandler->events_mask == 0) {
+		JANUS_LOG(LOG_VERB, " none");
+	} else {
+		if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_SESSION))
+			JANUS_LOG(LOG_VERB, " sessions");
+		if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_HANDLE))
+			JANUS_LOG(LOG_VERB, " handles");
+		if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_JSEP))
+			JANUS_LOG(LOG_VERB, " jsep");
+		if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_WEBRTC))
+			JANUS_LOG(LOG_VERB, " webrtc");
+		if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_MEDIA))
+			JANUS_LOG(LOG_VERB, " media");
+		if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_PLUGIN))
+			JANUS_LOG(LOG_VERB, " plugins");
+		if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_TRANSPORT))
+			JANUS_LOG(LOG_VERB, " transports");
+	}
+	JANUS_LOG(LOG_VERB, "\n");
+	if(eventhandlers == NULL)
+		eventhandlers = g_hash_table_new(g_str_hash, g_str_equal);
+	g_hash_table_insert(eventhandlers, (gpointer)janus_eventhandler->get_package(), janus_eventhandler);
+	return TRUE;
+}
 #if __SANITIZE_ADDRESS__
 /* disable fast_unwind to enable correct stack view if reported memory was allocated in *.so module */
 const char *__asan_default_options(void);
@@ -4151,51 +4200,9 @@ gint main(int argc, char *argv[])
 						JANUS_LOG(LOG_ERR, "\tCouldn't use function 'create'...\n");
 						continue;
 					}
-					/* Are all the mandatory methods and callbacks implemented? */
-					if(!janus_eventhandler->init || !janus_eventhandler->destroy ||
-							!janus_eventhandler->get_api_compatibility ||
-							!janus_eventhandler->get_version ||
-							!janus_eventhandler->get_version_string ||
-							!janus_eventhandler->get_description ||
-							!janus_eventhandler->get_package ||
-							!janus_eventhandler->get_name ||
-							!janus_eventhandler->incoming_event) {
-						JANUS_LOG(LOG_ERR, "\tMissing some mandatory methods/callbacks, skipping this event handler plugin...\n");
+					if(!install_eventhandler(janus_eventhandler)) {
 						continue;
 					}
-					if(janus_eventhandler->get_api_compatibility() < JANUS_EVENTHANDLER_API_VERSION) {
-						JANUS_LOG(LOG_ERR, "The '%s' event handler plugin was compiled against an older version of the API (%d < %d), skipping it: update it to enable it again\n",
-							janus_eventhandler->get_package(), janus_eventhandler->get_api_compatibility(), JANUS_EVENTHANDLER_API_VERSION);
-						continue;
-					}
-					janus_eventhandler->init(configs_folder);
-					JANUS_LOG(LOG_VERB, "\tVersion: %d (%s)\n", janus_eventhandler->get_version(), janus_eventhandler->get_version_string());
-					JANUS_LOG(LOG_VERB, "\t   [%s] %s\n", janus_eventhandler->get_package(), janus_eventhandler->get_name());
-					JANUS_LOG(LOG_VERB, "\t   %s\n", janus_eventhandler->get_description());
-					JANUS_LOG(LOG_VERB, "\t   Plugin API version: %d\n", janus_eventhandler->get_api_compatibility());
-					JANUS_LOG(LOG_VERB, "\t   Subscriptions:");
-					if(janus_eventhandler->events_mask == 0) {
-						JANUS_LOG(LOG_VERB, " none");
-					} else {
-						if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_SESSION))
-							JANUS_LOG(LOG_VERB, " sessions");
-						if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_HANDLE))
-							JANUS_LOG(LOG_VERB, " handles");
-						if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_JSEP))
-							JANUS_LOG(LOG_VERB, " jsep");
-						if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_WEBRTC))
-							JANUS_LOG(LOG_VERB, " webrtc");
-						if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_MEDIA))
-							JANUS_LOG(LOG_VERB, " media");
-						if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_PLUGIN))
-							JANUS_LOG(LOG_VERB, " plugins");
-						if(janus_flags_is_set(&janus_eventhandler->events_mask, JANUS_EVENT_TYPE_TRANSPORT))
-							JANUS_LOG(LOG_VERB, " transports");
-					}
-					JANUS_LOG(LOG_VERB, "\n");
-					if(eventhandlers == NULL)
-						eventhandlers = g_hash_table_new(g_str_hash, g_str_equal);
-					g_hash_table_insert(eventhandlers, (gpointer)janus_eventhandler->get_package(), janus_eventhandler);
 					if(eventhandlers_so == NULL)
 						eventhandlers_so = g_hash_table_new(g_str_hash, g_str_equal);
 					g_hash_table_insert(eventhandlers_so, (gpointer)janus_eventhandler->get_package(), event);
@@ -4213,8 +4220,17 @@ gint main(int argc, char *argv[])
 		}
 	}
 #else
+	janus_eventhandler *janus_eventhandler = create_rabbitmqevh();
+	if(!janus_eventhandler) {
+		JANUS_LOG(LOG_ERR, "\tCouldn't use function 'create_rabbitmqevh'...\n");
+	} else {
+		if(!install_eventhandler(janus_eventhandler)) {
+			exit(1);
+		}
+	}
     gboolean enable_events = TRUE;
-    if(janus_events_init(enable_events, "file", NULL) < 0) {
+    //if(janus_events_init(enable_events, "file", NULL) < 0) {
+	if(janus_events_init(enable_events, JANUS_SERVER_NAME, eventhandlers) < 0) {
         JANUS_LOG(LOG_FATAL, "Error initializing the Event handlers mechanism...\n");
         exit(1);
     }
