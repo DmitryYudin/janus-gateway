@@ -1,7 +1,7 @@
 # This configures the RabbitMQ event handler.
 
 general: {
-	enabled = true					# By default the module is not enabled
+	enabled = false					# By default the module is not enabled
 	events = "all"					# Comma separated list of the events mask you're interested
 									# in. Valid values are none, sessions, handles, jsep, webrtc,
 									# media, plugins, transports, core, external and all. By

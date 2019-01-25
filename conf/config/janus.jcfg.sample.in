@@ -4,10 +4,10 @@
 # and, if needed, shared apisecret and/or token authentication mechanism
 # between application(s) and Janus.
 general: {
-	configs_folder = /usr/local/etc/janus			; Configuration files folder
-	plugins_folder = /usr/local/lib/janus/plugins		; Plugins folder
-	transports_folder = /usr/local/lib/janus/transports	; Transports folder
-	events_folder = /usr/local/lib/janus/events			; Event handlers folder
+	configs_folder = "@confdir@"			# Configuration files folder
+	plugins_folder = "@plugindir@"			# Plugins folder
+	transports_folder = "@transportdir@"	# Transports folder
+	events_folder = "@eventdir@"			# Event handlers folder
 
 		# The next settings configure logging
 	#log_to_stdout = false					# Whether the Janus output should be written
@@ -103,8 +103,8 @@ general: {
 
 # Certificate and key to use for DTLS (and passphrase if needed).
 certificates: {
-	cert_pem = /usr/local/share/janus/certs/mycert.pem
-	cert_key = /usr/local/share/janus/certs/mycert.key
+	cert_pem = "@certdir@/mycert.pem"
+	cert_key = "@certdir@/mycert.key"
 	#cert_pwd = "secretpassphrase"
 }
 
@@ -125,7 +125,7 @@ certificates: {
 media: {
 	#ipv6 = true
 	#max_nack_queue = 500
-	rfc_4588 = true
+	#rfc_4588 = true
 	#rtp_port_range = "20000-40000"
 	#dtls_mtu = 1200
 	#no_media_timer = 1
@@ -152,7 +152,7 @@ nat: {
 	#stun_server = "stun.voip.eutelia.it"
 	#stun_port = 3478
 	nice_debug = false
-	full_trickle = true
+	#full_trickle = true
 	#ice_lite = true
 	#ice_tcp = true
 
